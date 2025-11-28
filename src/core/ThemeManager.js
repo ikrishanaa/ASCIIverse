@@ -1,0 +1,47 @@
+import GUI from 'lil-gui';
+
+export class ThemeManager {
+    constructor(asciiRenderer, sceneManager) {
+        this.asciiRenderer = asciiRenderer;
+        this.sceneManager = sceneManager;
+
+        this.params = {
+            density: 0.15,
+            color: '#00ff00',
+            backgroundColor: '#000000',
+            charSet: " .:-=+*#%@",
+            rotationSpeed: 1.0,
+            enableRGB: false
+        };
+
+        this.gui = new GUI();
+        this.initGUI();
+    }
+
+    initGUI() {
+        const folder = this.gui.addFolder('ASCII Settings');
+
+        folder.add(this.params, 'density', 0.05, 0.5).name('Resolution').onChange(v => {
+            this.asciiRenderer.updateDensity(v);
+        });
+
+        folder.add(this.params, 'enableRGB').name('RGB Split').onChange(v => {
+            this.asciiRenderer.toggleRGB(v);
+        });
+
+        folder.addColor(this.params, 'color').name('Font Color').onChange(v => {
+            this.asciiRenderer.updateColor(v);
+        });
+
+        folder.addColor(this.params, 'backgroundColor').name('Background').onChange(v => {
+            this.asciiRenderer.updateBackgroundColor(v);
+        });
+
+        folder.add(this.params, 'charSet').name('Char Set').onChange(v => {
+            this.asciiRenderer.updateCharSet(v);
+        });
+
+        const sceneFolder = this.gui.addFolder('Scene');
+        sceneFolder.add(this.params, 'rotationSpeed', 0, 5).name('Rotation Speed');
+    }
+}
