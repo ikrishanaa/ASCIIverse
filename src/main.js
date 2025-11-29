@@ -18,6 +18,16 @@ const themeManager = new ThemeManager(asciiRenderer, sceneManager, animationCont
 // Connect tap handler to animation toggle
 inputController.onTap = () => animationController.toggle();
 
+// Connect keyboard shortcuts
+inputController.onFrameObject = () => sceneManager.frameObject();
+inputController.onToggleWireframe = () => {
+  // Toggle between ASCII and wireframe (simple implementation)
+  console.log('[Wireframe] Toggle not yet implemented');
+};
+
+// Initialize camera position
+sceneManager.updateCameraPosition();
+
 function animate(time) {
   requestAnimationFrame(animate);
 

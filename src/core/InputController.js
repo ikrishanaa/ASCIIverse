@@ -24,6 +24,15 @@ export class InputController {
         this.gyroEnabled = false; // Toggle for gyroscope control
         this.gyroSensitivity = 0.005; // Rotation sensitivity
 
+        // Blender-style navigation
+        this.isMMBDown = false;      // Middle mouse button
+        this.isShiftHeld = false;    // Shift key for pan
+        this.navigationMode = 'none'; // none, orbit, pan
+
+        // Callbacks for keyboard shortcuts
+        this.onFrameObject = null;   // F key
+        this.onToggleWireframe = null; // Z key
+
         this.initListeners();
     }
 
@@ -35,14 +44,29 @@ export class InputController {
     }
 
     initListeners() {
-        window.addEventListener('mousedown', () => {
-            this.isDragging = true;
-            this.prevMouse.x = this.mouse.x;
-            this.prevMouse.y = this.mouse.y;
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {  // Left button
+                this.isDragging = true;
+                this.prevMouse.x = this.mouse.x;
+                this.prevMouse.y = this.mouse.y;
+            } else if (e.button === 1) {  // Middle button
+                this.isMMBDown = true;
+                e.preventDefault(); // Prevent default MMB behavior
+            }
         });
 
-        window.addEventListener('mouseup', () => {
-            this.isDragging = false;
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                this.isDragging = false;
+            } else if (e.button === 1) {
+                this.isMMBDown = false;
+                this.navigationMode = 'none';
+            }
+        });
+
+        // Prevent context menu on MMB
+        window.addEventListener('contextmenu', (e) => {
+            if (this.isMMBDown) e.preventDefault();
         });
 
         window.addEventListener('mousemove', (e) => {
@@ -57,7 +81,16 @@ export class InputController {
             this.velocity.x = e.movementX || 0;
             this.velocity.y = e.movementY || 0;
 
-            if (this.isDragging) {
+            // Blender-style navigation with MMB
+            if (this.isMMBDown) {
+                if (e.shiftKey) {
+                    this.navigationMode = 'pan';
+                } else {
+                    this.navigationMode = 'orbit';
+                }
+            }
+
+            if (this.isDragging && !this.isMMBDown) {
                 this.delta.x = x - this.prevMouse.x;
                 this.delta.y = y - this.prevMouse.y;
                 this.prevMouse.x = x;
@@ -66,6 +99,27 @@ export class InputController {
                 this.delta.x = 0;
                 this.delta.y = 0;
             }
+        });
+
+        // Keyboard shortcuts
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Shift') this.isShiftHeld = true;
+
+            // F key - Frame object
+            if ((e.key === 'f' || e.key === 'F') && this.onFrameObject) {
+                this.onFrameObject();
+                e.preventDefault();
+            }
+
+            // Z key - Toggle wireframe
+            if ((e.key === 'z' || e.key === 'Z') && this.onToggleWireframe) {
+                this.onToggleWireframe();
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'Shift') this.isShiftHeld = false;
         });
 
         window.addEventListener('wheel', (e) => {

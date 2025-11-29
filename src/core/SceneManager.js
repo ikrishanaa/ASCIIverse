@@ -14,11 +14,23 @@ export class SceneManager {
 
         this.raycaster = new THREE.Raycaster(); // Initialize Raycaster
 
+        // Camera orbit system (Blender-style)
+        this.cameraOrbit = {
+            azimuth: Math.PI / 4,      // Horizontal rotation
+            elevation: Math.PI / 3,    // Vertical rotation (30 degrees from horizontal)
+            distance: 5,               // Distance from pivot
+            pivot: new THREE.Vector3(0, 0, 0)  // Point to orbit around
+        };
+
+        // Auto-rotation
+        this.autoRotationEnabled = true;
+        this.autoRotationSpeed = 0.01;
+
         // Zoom smoothing properties
         this.targetCameraZ = 30; // Target zoom position
         this.zoomSpeed = 0.1; // Interpolation speed (0.05-0.5)
-        this.minZoom = 10; // Closest zoom
-        this.maxZoom = 100; // Farthest zoom
+        this.minZoom = 2; // Closest zoom
+        this.maxZoom = 20; // Farthest zoom
 
         // We don't append renderer.domElement to body because ASCIIRenderer will handle the output.
         // But for debugging/fallback, we might want to keep it available.
@@ -217,62 +229,104 @@ export class SceneManager {
 
     update(time, inputController, rotationSpeed = 1.0, animationController = null) {
         if (this.modelContainer) {
+            const sensitivity = 2; // Orbit sensitivity
 
-            // Gyroscope control (overrides auto-rotation)
-            if (inputController && inputController.gyroEnabled) {
-                const DEG_TO_RAD = Math.PI / 180;
-                // Map device tilt to object rotation
-                this.modelContainer.rotation.x = inputController.gyro.beta * DEG_TO_RAD * inputController.gyroSensitivity;
-                this.modelContainer.rotation.y = inputController.gyro.gamma * DEG_TO_RAD * inputController.gyroSensitivity;
-            } else {
-                // Normal controls (drag, hover, auto-rotate)
-                let isHovered = false;
-
-                if (inputController) {
-                    // Raycasting for hover detection
-                    this.raycaster.setFromCamera(inputController.mouse, this.camera);
-                    const intersects = this.raycaster.intersectObjects(this.modelContainer.children, true);
-
-                    if (intersects.length > 0) {
-                        isHovered = true;
-                    }
-                }
-
-                if (inputController && inputController.isDragging) {
-                    // Manual Rotation (Drag)
-                    const sensitivity = 0.005;
-                    this.modelContainer.rotation.y += inputController.delta.x * sensitivity;
-                    this.modelContainer.rotation.x += inputController.delta.y * sensitivity;
-                } else if (isHovered && inputController) {
-                    // Hover Interaction: Stop auto-rotation, Look at mouse (Tilt)
-                    // We add a subtle tilt based on mouse position relative to center
-                    // Target rotation is current rotation + small offset
-
-                    // Note: We don't want to snap, just add a small influence or stop spinning.
-                    // User asked for "interactive also", usually means "look at me".
-
-                    // Simple tilt:
-                    this.modelContainer.rotation.x += inputController.mouse.y * 0.005;
-                    this.modelContainer.rotation.y += inputController.mouse.x * 0.005;
-                } else if (!animationController || !animationController.isPaused) {
-                    // Auto rotation - Y axis only (turntable effect)
-                    // Only when not dragging AND not hovering AND not paused
-                    this.modelContainer.rotation.y += 0.01 * rotationSpeed;
-                }
+            // Handle camera navigation modes
+            if (inputController && inputController.navigationMode === 'orbit') {
+                // MMB drag → Orbit camera
+                this.orbitCamera(
+                    inputController.velocity.x * 0.01,
+                    inputController.velocity.y * 0.01
+                );
+            } else if (inputController && inputController.navigationMode === 'pan') {
+                // Shift + MMB drag → Pan camera
+                this.panCamera(
+                    inputController.velocity.x,
+                    inputController.velocity.y
+                );
+            } else if (this.autoRotationEnabled && (!animationController || !animationController.isPaused) && !inputController?.isDragging) {
+                // Auto-rotation when idle
+                this.cameraOrbit.azimuth += this.autoRotationSpeed * rotationSpeed;
+                this.updateCameraPosition();
             }
 
-            // Scroll interaction (smooth zoom)
-            if (inputController) {
-                // Calculate target zoom position
-                this.targetCameraZ = 30 + inputController.scroll * 5;
+            // Handle scroll zoom (change orbit distance)
+            if (inputController && inputController.scroll !== 0) {
+                const zoomDelta = inputController.scroll * 0.5;
+                this.cameraOrbit.distance += zoomDelta;
 
-                // Apply constraints
-                this.targetCameraZ = Math.max(this.minZoom, Math.min(this.maxZoom, this.targetCameraZ));
+                // Clamp distance
+                this.cameraOrbit.distance = Math.max(this.minZoom, Math.min(this.maxZoom, this.cameraOrbit.distance));
 
-                // Smooth interpolation to target
-                this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.zoomSpeed;
+                this.updateCameraPosition();
             }
         }
+    }
+
+    // Update camera position from spherical coordinates
+    updateCameraPosition() {
+        const theta = this.cameraOrbit.azimuth;
+        const phi = this.cameraOrbit.elevation;
+        const r = this.cameraOrbit.distance;
+
+        // Clamp elevation to prevent gimbal lock
+        const clampedPhi = Math.max(0.1, Math.min(Math.PI - 0.1, phi));
+
+        // Spherical to Cartesian
+        this.camera.position.x = this.cameraOrbit.pivot.x + r * Math.sin(clampedPhi) * Math.cos(theta);
+        this.camera.position.y = this.cameraOrbit.pivot.y + r * Math.cos(clampedPhi);
+        this.camera.position.z = this.cameraOrbit.pivot.z + r * Math.sin(clampedPhi) * Math.sin(theta);
+
+        this.camera.lookAt(this.cameraOrbit.pivot);
+    }
+
+    // Orbit camera around pivot
+    orbitCamera(deltaAzimuth, deltaElevation) {
+        this.cameraOrbit.azimuth += deltaAzimuth;
+        this.cameraOrbit.elevation += deltaElevation;
+
+        // Clamp elevation
+        this.cameraOrbit.elevation = Math.max(0.1, Math.min(Math.PI - 0.1, this.cameraOrbit.elevation));
+
+        this.updateCameraPosition();
+    }
+
+    // Pan camera (move pivot point)
+    panCamera(deltaX, deltaY) {
+        // Get camera right and up vectors
+        const cameraRight = new THREE.Vector3();
+        const cameraUp = new THREE.Vector3();
+
+        this.camera.getWorldDirection(cameraRight);
+        cameraRight.cross(this.camera.up).normalize();
+        cameraUp.copy(this.camera.up).normalize();
+
+        // Pan based on camera distance
+        const panSpeed = this.cameraOrbit.distance * 0.001;
+
+        this.cameraOrbit.pivot.add(cameraRight.multiplyScalar(-deltaX * panSpeed));
+        this.cameraOrbit.pivot.add(cameraUp.multiplyScalar(deltaY * panSpeed));
+
+        this.updateCameraPosition();
+    }
+
+    // Frame object in view (F key)
+    frameObject() {
+        if (!this.modelContainer) return;
+
+        const box = new THREE.Box3().setFromObject(this.modelContainer);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+
+        // Set pivot to object center
+        this.cameraOrbit.pivot.copy(center);
+
+        // Set distance to frame object nicely
+        this.cameraOrbit.distance = size.length() * 1.5;
+        this.cameraOrbit.azimuth = Math.PI / 4;
+        this.cameraOrbit.elevation = Math.PI / 3;
+
+        this.updateCameraPosition();
     }
 
     resetZoom() {

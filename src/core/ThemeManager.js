@@ -100,6 +100,15 @@ export class ThemeManager {
         // Animation control
         sceneFolder.add({ togglePause: () => this.animationController.toggle() }, 'togglePause').name('⏯️ Pause/Play');
 
+        // Auto-rotation checkbox (Blender-style)
+        this.params.autoRotation = true;
+        sceneFolder.add(this.params, 'autoRotation').name('Auto-Rotation').onChange(v => {
+            this.sceneManager.autoRotationEnabled = v;
+        });
+
+        // Frame object button (F key)
+        sceneFolder.add({ frame: () => this.sceneManager.frameObject() }, 'frame').name('🎯 Frame Object (F)');
+
         // Gyroscope control (mobile only)
         this.params.gyroEnabled = false;
         sceneFolder.add(this.params, 'gyroEnabled').name('Enable Gyroscope').onChange(v => {
