@@ -1,3 +1,5 @@
+import html2canvas from 'html2canvas';
+
 export class ASCIIRenderer {
     constructor(renderer, scene, camera) {
         this.renderer = renderer;
@@ -7,6 +9,15 @@ export class ASCIIRenderer {
         this.charSet = " .:-=+*#%@";
         this.density = 0.15;
         this.enableRGB = false; // Toggle for RGB split
+        this.rgbSplitIntensity = 0; // Dynamic RGB split (0 to 10+)
+        this.cursorProximityEnabled = false; // Toggle for cursor effects
+        this.proximityIntensity = 0; // Current blur/glow intensity (0 to 1)
+
+        // Adaptive quality system
+        this.adaptiveQuality = false; // Toggle for adaptive performance
+        this.targetFPS = 30; // Minimum target FPS
+        this.baseDensity = 0.15; // Original density (saved for recovery)
+        this.minDensity = 0.05; // Minimum quality fallback
 
         // Container for all layers
         this.container = document.createElement('div');
@@ -108,10 +119,11 @@ export class ASCIIRenderer {
             this.layerG.textContent = strG;
             this.layerB.textContent = strB;
 
-            // Apply offsets for effect
-            this.layerR.style.transform = `translate(-2px, 0)`;
+            // Apply offsets for effect (dynamic based on intensity)
+            const offset = this.rgbSplitIntensity;
+            this.layerR.style.transform = `translate(${-offset}px, 0)`;
             this.layerG.style.transform = `translate(0, 0)`;
-            this.layerB.style.transform = `translate(2px, 0)`;
+            this.layerB.style.transform = `translate(${offset}px, 0)`;
 
         } else {
             let asciiStr = '';
@@ -130,6 +142,22 @@ export class ASCIIRenderer {
                 asciiStr += '\n';
             }
             this.layerMain.textContent = asciiStr;
+        }
+
+        // Apply cursor proximity effects
+        if (this.cursorProximityEnabled && this.proximityIntensity > 0) {
+            const blur = this.proximityIntensity * 2; // 0-2px blur
+            const brightness = 1 + (this.proximityIntensity * 0.5); // 1.0-1.5 brightness
+            const shadowIntensity = this.proximityIntensity * 10; // 0-10px glow
+
+            this.container.style.filter = `blur(${blur}px) brightness(${brightness})`;
+
+            // Add glow effect
+            const glowColor = this.enableRGB ? 'rgba(0, 255, 200, 0.8)' : this.layerMain.style.color || '#00ff00';
+            this.container.style.textShadow = `0 0 ${shadowIntensity}px ${glowColor}`;
+        } else {
+            this.container.style.filter = 'none';
+            this.container.style.textShadow = 'none';
         }
     }
 
@@ -169,6 +197,52 @@ export class ASCIIRenderer {
             this.layerR.style.display = 'none';
             this.layerG.style.display = 'none';
             this.layerB.style.display = 'none';
+        }
+    }
+
+    adjustQuality(currentFPS) {
+        if (!this.adaptiveQuality) return;
+
+        if (currentFPS < this.targetFPS) {
+            // Performance is poor, reduce quality
+            const newDensity = Math.max(this.minDensity, this.density * 0.9);
+            if (newDensity !== this.density) {
+                this.density = newDensity;
+                console.log(`[Adaptive] Reduced density to ${this.density.toFixed(3)} (FPS: ${currentFPS.toFixed(1)})`);
+            }
+        } else if (currentFPS > this.targetFPS + 10 && this.density < this.baseDensity) {
+            // Performance is good, can increase quality
+            const newDensity = Math.min(this.baseDensity, this.density * 1.05);
+            if (newDensity !== this.density) {
+                this.density = newDensity;
+                console.log(`[Adaptive] Increased density to ${this.density.toFixed(3)} (FPS: ${currentFPS.toFixed(1)})`);
+            }
+        }
+    }
+
+    async exportToPNG() {
+        try {
+            console.log('[Export] Capturing ASCII art...');
+
+            const canvas = await html2canvas(this.container, {
+                backgroundColor: null,
+                scale: 2, // Higher quality (2x resolution)
+                logging: false
+            });
+
+            // Convert to blob and trigger download
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `asciiverse_${Date.now()}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                console.log('[Export] PNG downloaded successfully');
+            });
+        } catch (error) {
+            console.error('[Export] Failed:', error);
         }
     }
 }

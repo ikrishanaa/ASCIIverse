@@ -12,6 +12,14 @@ export class SceneManager {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
 
+        this.raycaster = new THREE.Raycaster(); // Initialize Raycaster
+
+        // Zoom smoothing properties
+        this.targetCameraZ = 30; // Target zoom position
+        this.zoomSpeed = 0.1; // Interpolation speed (0.05-0.5)
+        this.minZoom = 10; // Closest zoom
+        this.maxZoom = 100; // Farthest zoom
+
         // We don't append renderer.domElement to body because ASCIIRenderer will handle the output.
         // But for debugging/fallback, we might want to keep it available.
 
@@ -207,29 +215,69 @@ export class SceneManager {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    update(time, inputController, rotationSpeed = 1.0) {
+    update(time, inputController, rotationSpeed = 1.0, animationController = null) {
         if (this.modelContainer) {
-            // Auto rotation - Y axis only (turntable effect)
-            this.modelContainer.rotation.y += 0.01 * rotationSpeed;
 
-            // Add mouse interaction
+            // Gyroscope control (overrides auto-rotation)
+            if (inputController && inputController.gyroEnabled) {
+                const DEG_TO_RAD = Math.PI / 180;
+                // Map device tilt to object rotation
+                this.modelContainer.rotation.x = inputController.gyro.beta * DEG_TO_RAD * inputController.gyroSensitivity;
+                this.modelContainer.rotation.y = inputController.gyro.gamma * DEG_TO_RAD * inputController.gyroSensitivity;
+            } else {
+                // Normal controls (drag, hover, auto-rotate)
+                let isHovered = false;
+
+                if (inputController) {
+                    // Raycasting for hover detection
+                    this.raycaster.setFromCamera(inputController.mouse, this.camera);
+                    const intersects = this.raycaster.intersectObjects(this.modelContainer.children, true);
+
+                    if (intersects.length > 0) {
+                        isHovered = true;
+                    }
+                }
+
+                if (inputController && inputController.isDragging) {
+                    // Manual Rotation (Drag)
+                    const sensitivity = 0.005;
+                    this.modelContainer.rotation.y += inputController.delta.x * sensitivity;
+                    this.modelContainer.rotation.x += inputController.delta.y * sensitivity;
+                } else if (isHovered && inputController) {
+                    // Hover Interaction: Stop auto-rotation, Look at mouse (Tilt)
+                    // We add a subtle tilt based on mouse position relative to center
+                    // Target rotation is current rotation + small offset
+
+                    // Note: We don't want to snap, just add a small influence or stop spinning.
+                    // User asked for "interactive also", usually means "look at me".
+
+                    // Simple tilt:
+                    this.modelContainer.rotation.x += inputController.mouse.y * 0.005;
+                    this.modelContainer.rotation.y += inputController.mouse.x * 0.005;
+                } else if (!animationController || !animationController.isPaused) {
+                    // Auto rotation - Y axis only (turntable effect)
+                    // Only when not dragging AND not hovering AND not paused
+                    this.modelContainer.rotation.y += 0.01 * rotationSpeed;
+                }
+            }
+
+            // Scroll interaction (smooth zoom)
             if (inputController) {
-                // We add the mouse offset to the rotation. 
-                // To make it feel responsive but stable, we can add a small delta based on mouse position
-                // or map mouse position to target rotation.
-                // Here we'll add a continuous rotation influence based on mouse position (like a joystick)
-                // OR we can map mouse directly to rotation offset.
+                // Calculate target zoom position
+                this.targetCameraZ = 30 + inputController.scroll * 5;
 
-                // Let's map mouse position to a temporary rotation offset for "looking around" effect
-                // But since we are auto-rotating, adding to rotation is better.
+                // Apply constraints
+                this.targetCameraZ = Math.max(this.minZoom, Math.min(this.maxZoom, this.targetCameraZ));
 
-                this.modelContainer.rotation.x += inputController.mouse.y * 0.05;
-                this.modelContainer.rotation.y += inputController.mouse.x * 0.05;
-
-                // Scroll interaction (zoom)
-                this.camera.position.z = 30 + inputController.scroll * 5;
+                // Smooth interpolation to target
+                this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.zoomSpeed;
             }
         }
+    }
+
+    resetZoom() {
+        this.targetCameraZ = 30;
+        this.camera.position.z = 30;
     }
 
     render() {

@@ -1,11 +1,15 @@
 import GUI from 'lil-gui';
+import { THEMES } from '../themes/ThemePresets.js';
 
 export class ThemeManager {
-    constructor(asciiRenderer, sceneManager) {
+    constructor(asciiRenderer, sceneManager, animationController, inputController) {
         this.asciiRenderer = asciiRenderer;
         this.sceneManager = sceneManager;
+        this.animationController = animationController;
+        this.inputController = inputController;
 
         this.params = {
+            currentTheme: 'Default',
             density: 0.15,
             color: '#00ff00',
             backgroundColor: '#000000',
@@ -21,12 +25,40 @@ export class ThemeManager {
     initGUI() {
         const folder = this.gui.addFolder('ASCII Settings');
 
+        // Theme Preset Selector (at top for visibility)
+        folder.add(this.params, 'currentTheme', Object.keys(THEMES))
+            .name('🎨 Theme')
+            .onChange(themeName => this.applyTheme(themeName));
+
+        // Export button with visual feedback
+        const exportButton = folder.add({
+            export: async () => {
+                const btn = exportButton.domElement.querySelector('input');
+                const originalText = btn.value;
+                btn.value = 'Exporting...';
+                btn.disabled = true;
+
+                await this.asciiRenderer.exportToPNG();
+
+                btn.value = '✅ Exported!';
+                setTimeout(() => {
+                    btn.value = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }, 'export').name('📸 Export PNG');
+
         folder.add(this.params, 'density', 0.05, 0.5).name('Resolution').onChange(v => {
             this.asciiRenderer.updateDensity(v);
         });
 
-        folder.add(this.params, 'enableRGB').name('RGB Split').onChange(v => {
+        folder.add(this.params, 'enableRGB').name('Enable RGB').onChange(v => {
             this.asciiRenderer.toggleRGB(v);
+        });
+
+        this.params.cursorProximity = false; // Initialize before adding to GUI
+        folder.add(this.params, 'cursorProximity').name('Cursor Proximity').onChange(v => {
+            this.asciiRenderer.cursorProximityEnabled = v;
         });
 
         folder.addColor(this.params, 'color').name('Font Color').onChange(v => {
@@ -37,12 +69,47 @@ export class ThemeManager {
             this.asciiRenderer.updateBackgroundColor(v);
         });
 
+        // Performance controls
+        this.params.adaptiveQuality = false;
+        folder.add(this.params, 'adaptiveQuality').name('Adaptive Quality').onChange(v => {
+            this.asciiRenderer.adaptiveQuality = v;
+            if (v) {
+                this.asciiRenderer.baseDensity = this.asciiRenderer.density;
+            }
+        });
+
+        this.params.targetFPS = 30;
+        folder.add(this.params, 'targetFPS', 20, 60, 5).name('Target FPS').onChange(v => {
+            this.asciiRenderer.targetFPS = v;
+        });
+
         folder.add(this.params, 'charSet').name('Char Set').onChange(v => {
             this.asciiRenderer.updateCharSet(v);
         });
 
         const sceneFolder = this.gui.addFolder('Scene');
         sceneFolder.add(this.params, 'rotationSpeed', 0, 5).name('Rotation Speed');
+
+        this.params.zoomSpeed = 0.1;
+        sceneFolder.add(this.params, 'zoomSpeed', 0.05, 0.5).name('Zoom Speed').onChange(v => {
+            this.sceneManager.zoomSpeed = v;
+        });
+
+        sceneFolder.add({ resetZoom: () => this.sceneManager.resetZoom() }, 'resetZoom').name('Reset Zoom');
+
+        // Animation control
+        sceneFolder.add({ togglePause: () => this.animationController.toggle() }, 'togglePause').name('⏯️ Pause/Play');
+
+        // Gyroscope control (mobile only)
+        this.params.gyroEnabled = false;
+        sceneFolder.add(this.params, 'gyroEnabled').name('Enable Gyroscope').onChange(v => {
+            this.inputController.gyroEnabled = v;
+        });
+
+        this.params.gyroSensitivity = 0.005;
+        sceneFolder.add(this.params, 'gyroSensitivity', 0.001, 0.02, 0.001).name('Gyro Sensitivity').onChange(v => {
+            this.inputController.gyroSensitivity = v;
+        });
 
         this.params.modelScale = 1.0;
         this.params.rotX = 0;
@@ -92,5 +159,29 @@ export class ThemeManager {
                 reader.readAsArrayBuffer(file);
             }
         });
+    }
+
+    applyTheme(themeName) {
+        const theme = THEMES[themeName];
+        if (!theme) return;
+
+        console.log(`[Theme] Applying "${themeName}" theme`);
+
+        // Update parameters
+        this.params.color = theme.color;
+        this.params.backgroundColor = theme.backgroundColor;
+        this.params.charSet = theme.charSet;
+        this.params.enableRGB = theme.enableRGB;
+        this.params.cursorProximity = theme.cursorProximity || false;
+
+        // Apply to renderer
+        this.asciiRenderer.updateColor(theme.color);
+        this.asciiRenderer.updateBackgroundColor(theme.backgroundColor);
+        this.asciiRenderer.updateCharSet(theme.charSet);
+        this.asciiRenderer.toggleRGB(theme.enableRGB);
+        this.asciiRenderer.cursorProximityEnabled = theme.cursorProximity || false;
+
+        // Refresh GUI display to show updated values
+        this.gui.updateDisplay();
     }
 }
