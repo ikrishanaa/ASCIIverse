@@ -43,5 +43,33 @@ export class ThemeManager {
 
         const sceneFolder = this.gui.addFolder('Scene');
         sceneFolder.add(this.params, 'rotationSpeed', 0, 5).name('Rotation Speed');
+
+        // File Upload
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.obj,.gltf,.glb,.stl';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        const uploadParams = {
+            upload: () => {
+                fileInput.click();
+            }
+        };
+
+        sceneFolder.add(uploadParams, 'upload').name('Upload Model');
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const buffer = e.target.result;
+                    const extension = file.name.split('.').pop().toLowerCase();
+                    this.sceneManager.loadModel(buffer, extension);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
     }
 }
