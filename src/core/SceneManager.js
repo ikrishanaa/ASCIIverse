@@ -23,7 +23,26 @@ export class SceneManager {
 
     initScene() {
         // Add Fog for depth perception (distant objects fade to black)
-        this.scene.fog = new THREE.FogExp2(0x000000, 0.02);
+        // Reduced density to prevent large objects from fading out too much
+        this.scene.fog = new THREE.FogExp2(0x000000, 0.01);
+
+        // Container for the model to handle centering and rotation
+        this.modelContainer = new THREE.Group();
+        this.scene.add(this.modelContainer);
+
+        // Create a TorusKnot for testing
+        const geometry = new THREE.TorusKnotGeometry(10, 3, 100, 16);
+        const material = new THREE.MeshStandardMaterial({
+            color: 0x00ff00,
+            wireframe: false,
+            side: THREE.DoubleSide,
+            roughness: 0.5,
+            metalness: 0.5
+        });
+        this.mesh = new THREE.Mesh(geometry, material);
+
+        // Add to container instead of scene directly
+        this.modelContainer.add(this.mesh);
 
         this.camera.position.z = 30;
     }
@@ -50,11 +69,11 @@ export class SceneManager {
     }
 
     async loadModel(buffer, extension) {
-        // Remove existing mesh
-        if (this.mesh) {
-            this.scene.remove(this.mesh);
-            this.mesh = null;
+        // Clear container
+        while (this.modelContainer.children.length > 0) {
+            this.modelContainer.remove(this.modelContainer.children[0]);
         }
+        this.mesh = null; // We might have multiple meshes now, so this reference is less useful for single mesh manipulation, but we keep it null to be safe.
 
         try {
             switch (extension) {
@@ -82,20 +101,7 @@ export class SceneManager {
         const loader = new OBJLoader();
         const text = new TextDecoder().decode(buffer);
         const object = loader.parse(text);
-
-        // Find the first mesh
-        let newMesh = null;
-        object.traverse((child) => {
-            if (child.isMesh && !newMesh) {
-                newMesh = child;
-            }
-        });
-
-        if (newMesh) {
-            this.setupMesh(newMesh);
-        } else {
-            console.error("No mesh found in OBJ");
-        }
+        this.setupModel(object);
     }
 
     loadSTL(buffer) {
@@ -109,68 +115,90 @@ export class SceneManager {
             metalness: 0.5
         });
         const mesh = new THREE.Mesh(geometry, material);
-        this.setupMesh(mesh);
+        this.setupModel(mesh);
     }
 
     async loadGLTF(buffer) {
         const loader = new GLTFLoader();
         try {
             const gltf = await loader.parseAsync(buffer, '');
-
-            let newMesh = null;
-            gltf.scene.traverse((child) => {
-                if (child.isMesh && !newMesh) {
-                    newMesh = child;
-                }
-            });
-
-            if (newMesh) {
-                this.setupMesh(newMesh);
-            } else {
-                console.error("No mesh found in GLTF/GLB");
-            }
+            this.setupModel(gltf.scene);
         } catch (error) {
             console.error("Error parsing GLTF:", error);
             throw error;
         }
     }
 
-    setupMesh(mesh) {
-        this.mesh = mesh;
+    setupModel(object) {
+        // Traverse to apply materials to all meshes in the hierarchy
+        object.traverse((child) => {
+            if (child.isMesh) {
+                // Ensure material is visible
+                if (!child.material || Array.isArray(child.material)) {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0x00ff00,
+                        wireframe: false,
+                        side: THREE.DoubleSide,
+                        roughness: 0.5,
+                        metalness: 0.5
+                    });
+                } else {
+                    // Update existing material to be more visible
+                    child.material.wireframe = false;
+                    child.material.side = THREE.DoubleSide;
+                    if (child.material.roughness !== undefined) child.material.roughness = 0.5;
+                    if (child.material.metalness !== undefined) child.material.metalness = 0.5;
+                }
+            }
+        });
 
-        // Normalize scale and position
-        const box = new THREE.Box3().setFromObject(this.mesh);
+        // Add object to container
+        this.modelContainer.add(object);
+        this.currentObject = object; // Store reference for orientation fix
+
+        // Center the object
+        const box = new THREE.Box3().setFromObject(object);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
 
         const maxDim = Math.max(size.x, size.y, size.z);
         const scale = 20 / maxDim; // Scale to fit roughly in a 20 unit box
 
-        this.mesh.scale.set(scale, scale, scale);
-        // Center the mesh by offsetting its position
-        // Note: We need to be careful if the mesh already has a position or if the geometry is offset.
-        // The safest way is to wrap it in a group or just adjust position relative to center.
-        // Here we adjust the mesh position directly.
-        this.mesh.position.sub(center.multiplyScalar(scale));
+        this.baseScale = scale; // Store base scale
 
-        // Ensure material is visible
-        if (!this.mesh.material || Array.isArray(this.mesh.material)) {
-            this.mesh.material = new THREE.MeshStandardMaterial({
-                color: 0x00ff00,
-                wireframe: false,
-                side: THREE.DoubleSide,
-                roughness: 0.5,
-                metalness: 0.5
-            });
-        } else {
-            // Update existing material to be more visible
-            this.mesh.material.wireframe = false;
-            this.mesh.material.side = THREE.DoubleSide;
-            if (this.mesh.material.roughness !== undefined) this.mesh.material.roughness = 0.5;
-            if (this.mesh.material.metalness !== undefined) this.mesh.material.metalness = 0.5;
+        object.scale.set(scale, scale, scale);
+
+        // Center the object by offsetting its position relative to the container
+        // We move the object so its center aligns with the container's origin (0,0,0)
+        object.position.sub(center.multiplyScalar(scale));
+    }
+
+    setModelRotation(x, y, z) {
+        if (this.currentObject) {
+            this.currentObject.rotation.x = x * (Math.PI / 180);
+            this.currentObject.rotation.y = y * (Math.PI / 180);
+            this.currentObject.rotation.z = z * (Math.PI / 180);
         }
+    }
 
-        this.scene.add(this.mesh);
+    setModelScale(s) {
+        if (this.currentObject && this.baseScale) {
+            const newScale = this.baseScale * s;
+            this.currentObject.scale.set(newScale, newScale, newScale);
+
+            // Re-center if needed (though position offset might need adjustment if scale changes significantly relative to center)
+            // For simplicity, we just scale in place. If the pivot is correct (centered), it should be fine.
+        }
+    }
+
+    setOrientation(fix) {
+        if (this.currentObject) {
+            if (fix) {
+                this.currentObject.rotation.x = -Math.PI / 2;
+            } else {
+                this.currentObject.rotation.x = 0;
+            }
+        }
     }
 
     onWindowResize() {
@@ -179,18 +207,26 @@ export class SceneManager {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    update(time, inputController) {
-        if (this.mesh) {
-            // Rotate based on time
-            this.mesh.rotation.x = time * 0.2;
-            this.mesh.rotation.y = time * 0.1;
+    update(time, inputController, rotationSpeed = 1.0) {
+        if (this.modelContainer) {
+            // Auto rotation - Y axis only (turntable effect)
+            this.modelContainer.rotation.y += 0.01 * rotationSpeed;
 
             // Add mouse interaction
             if (inputController) {
-                this.mesh.rotation.x += inputController.mouse.y * 0.5;
-                this.mesh.rotation.y += inputController.mouse.x * 0.5;
+                // We add the mouse offset to the rotation. 
+                // To make it feel responsive but stable, we can add a small delta based on mouse position
+                // or map mouse position to target rotation.
+                // Here we'll add a continuous rotation influence based on mouse position (like a joystick)
+                // OR we can map mouse directly to rotation offset.
 
-                // Scroll interaction (zoom or rotate)
+                // Let's map mouse position to a temporary rotation offset for "looking around" effect
+                // But since we are auto-rotating, adding to rotation is better.
+
+                this.modelContainer.rotation.x += inputController.mouse.y * 0.05;
+                this.modelContainer.rotation.y += inputController.mouse.x * 0.05;
+
+                // Scroll interaction (zoom)
                 this.camera.position.z = 30 + inputController.scroll * 5;
             }
         }

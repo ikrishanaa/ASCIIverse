@@ -44,6 +44,27 @@ export class ThemeManager {
         const sceneFolder = this.gui.addFolder('Scene');
         sceneFolder.add(this.params, 'rotationSpeed', 0, 5).name('Rotation Speed');
 
+        this.params.modelScale = 1.0;
+        this.params.rotX = 0;
+        this.params.rotY = 0;
+        this.params.rotZ = 0;
+
+        const modelFolder = sceneFolder.addFolder('Model Adjustments');
+
+        modelFolder.add(this.params, 'modelScale', 0.1, 5.0).name('Scale').onChange(v => {
+            this.sceneManager.setModelScale(v);
+        });
+
+        modelFolder.add(this.params, 'rotX', -180, 180).name('Rotate X').onChange(v => {
+            this.sceneManager.setModelRotation(this.params.rotX, this.params.rotY, this.params.rotZ);
+        });
+        modelFolder.add(this.params, 'rotY', -180, 180).name('Rotate Y').onChange(v => {
+            this.sceneManager.setModelRotation(this.params.rotX, this.params.rotY, this.params.rotZ);
+        });
+        modelFolder.add(this.params, 'rotZ', -180, 180).name('Rotate Z').onChange(v => {
+            this.sceneManager.setModelRotation(this.params.rotX, this.params.rotY, this.params.rotZ);
+        });
+
         // File Upload
         const fileInput = document.createElement('input');
         fileInput.type = 'file';

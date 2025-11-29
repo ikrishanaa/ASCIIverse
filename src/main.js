@@ -23,18 +23,8 @@ function animate(time) {
   // Use rotation speed from theme manager
   const rotationSpeed = themeManager.params.rotationSpeed;
 
-  if (sceneManager.mesh) {
-    // Rotate based on speed
-    sceneManager.mesh.rotation.x += 0.01 * rotationSpeed;
-    sceneManager.mesh.rotation.y += 0.005 * rotationSpeed;
-
-    // Add mouse interaction
-    sceneManager.mesh.rotation.x += inputController.mouse.y * 0.05;
-    sceneManager.mesh.rotation.y += inputController.mouse.x * 0.05;
-
-    // Scroll interaction (zoom)
-    sceneManager.camera.position.z = 30 + inputController.scroll * 5;
-  }
+  // Delegate update to SceneManager
+  sceneManager.update(time * 0.001, inputController, rotationSpeed);
 
   asciiRenderer.render();
 
