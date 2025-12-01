@@ -32,6 +32,9 @@ export class SceneManager {
         this.minZoom = 2; // Closest zoom
         this.maxZoom = 20; // Farthest zoom
 
+        // Wireframe mode
+        this.wireframeMode = false;
+
         // We don't append renderer.domElement to body because ASCIIRenderer will handle the output.
         // But for debugging/fallback, we might want to keep it available.
 
@@ -332,6 +335,20 @@ export class SceneManager {
     resetZoom() {
         this.targetCameraZ = 30;
         this.camera.position.z = 30;
+    }
+
+    toggleWireframe() {
+        this.wireframeMode = !this.wireframeMode;
+
+        // Toggle wireframe on all meshes
+        this.modelContainer.traverse((child) => {
+            if (child.isMesh) {
+                child.material.wireframe = this.wireframeMode;
+            }
+        });
+
+        console.log(`[SceneManager] Wireframe ${this.wireframeMode ? 'ON' : 'OFF'}`);
+        return this.wireframeMode;
     }
 
     render() {

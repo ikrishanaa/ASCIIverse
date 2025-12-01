@@ -21,8 +21,8 @@ inputController.onTap = () => animationController.toggle();
 // Connect keyboard shortcuts
 inputController.onFrameObject = () => sceneManager.frameObject();
 inputController.onToggleWireframe = () => {
-  // Toggle between ASCII and wireframe (simple implementation)
-  console.log('[Wireframe] Toggle not yet implemented');
+  const wireframeEnabled = sceneManager.toggleWireframe();
+  asciiRenderer.toggleWireframe();
 };
 
 // Initialize camera position
@@ -33,7 +33,11 @@ function animate(time) {
 
   stats.begin();
 
+  // Update input controller (smooth scroll, velocity decay)
   inputController.update();
+
+  // Update scene with input
+  sceneManager.update(time, inputController, 1.0, animationController);
 
   // Use rotation speed from theme manager
   const rotationSpeed = themeManager.params.rotationSpeed;

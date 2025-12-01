@@ -1,96 +1,55 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+/* ASCIIverse - Mobile Responsiveness (Non-Destructive) */
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+/* Only override what's needed for mobile, keep existing Vite styles */
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
+html,
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: pan-y pinch-zoom;
+  /* Allow vertical scroll on GUI but prevent page bounce */
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* Prevent text selection during touch on canvas area only */
+canvas {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vanilla:hover {
-  filter: drop-shadow(0 0 2em #f7df1eaa);
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+/* Mobile-specific GUI positioning - only activate on small screens */
+@media (max-width: 768px) {
+  .lil-gui.root {
+    position: fixed !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    left: auto !important;
+    top: auto !important;
+    width: auto !important;
+    max-width: 100% !important;
+    max-height: 50vh !important;
+    overflow-y: auto !important;
+    z-index: 1000 !important;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
   }
-  a:hover {
-    color: #747bff;
+
+  /* Larger touch targets on mobile */
+  .lil-gui .controller {
+    min-height: 32px;
   }
-  button {
-    background-color: #f9f9f9;
+
+  .lil-gui button {
+    padding: 8px 12px;
+  }
+}
+
+/* Desktop - keep lil-gui on the right (default behavior) */
+@media (min-width: 769px) {
+  .lil-gui.root {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    max-height: 100vh !important;
+    overflow-y: auto !important;
   }
 }

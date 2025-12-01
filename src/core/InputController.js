@@ -28,6 +28,9 @@ export class InputController {
         this.isMMBDown = false;      // Middle mouse button
         this.isShiftHeld = false;    // Shift key for pan
         this.navigationMode = 'none'; // none, orbit, pan
+        this.touchMode = 'none';     // Touch gesture mode
+        this.lastTouchX = 0;
+        this.lastTouchY = 0;
 
         // Callbacks for keyboard shortcuts
         this.onFrameObject = null;   // F key
@@ -123,6 +126,10 @@ export class InputController {
         });
 
         window.addEventListener('wheel', (e) => {
+            // Set scroll delta for this frame
+            this.scroll = e.deltaY * 0.001;
+
+            // Also update targetScroll for any legacy code
             this.targetScroll += e.deltaY * 0.001;
         });
 
@@ -140,17 +147,16 @@ export class InputController {
             this.lastTapTime = now;
         });
 
-        // Touch support with pinch gesture
+        // Touch support with Blender-style navigation
         window.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
-                // Two fingers - start pinch
-                this.isPinching = true;
-                this.isDragging = false;
+                // Two fingers - check if pinch or pan
                 this.lastPinchDistance = this.getTouchDistance(e.touches[0], e.touches[1]);
+                // We'll determine pinch vs pan based on distance change in touchmove
+                this.touchMode = 'twoFinger';
             } else if (e.touches.length === 1) {
-                // Single finger - drag
-                this.isDragging = true;
-                this.isPinching = false;
+                // Single finger - orbit camera
+                this.navigationMode = 'orbit';
                 const touch = e.touches[0];
                 this.prevMouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
                 this.prevMouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
@@ -158,36 +164,54 @@ export class InputController {
         });
 
         window.addEventListener('touchend', () => {
-            this.isDragging = false;
+            this.navigationMode = 'none';
+            this.touchMode = 'none';
             this.isPinching = false;
         });
 
         window.addEventListener('touchmove', (e) => {
-            if (e.touches.length === 2 && this.isPinching) {
-                // Pinch gesture
+            if (e.touches.length === 2) {
                 const currentDistance = this.getTouchDistance(e.touches[0], e.touches[1]);
-                const pinchDelta = currentDistance - this.lastPinchDistance;
+                const distanceChange = Math.abs(currentDistance - this.lastPinchDistance);
 
-                // Convert pinch to scroll (pinch out = zoom in = negative scroll)
-                this.targetScroll -= pinchDelta * 0.01;
+                // If fingers are moving apart/together significantly, it's a pinch
+                if (distanceChange > 5 || this.isPinching) {
+                    this.isPinching = true;
+                    const pinchDelta = currentDistance - this.lastPinchDistance;
+                    this.targetScroll -= pinchDelta * 0.01;
+                    this.lastPinchDistance = currentDistance;
+                    e.preventDefault();
+                } else {
+                    // Otherwise, it's a pan gesture
+                    this.navigationMode = 'pan';
 
-                this.lastPinchDistance = currentDistance;
-                e.preventDefault(); // Prevent page zoom
-            } else if (e.touches.length === 1 && this.isDragging) {
-                // Single finger drag
+                    // Use movement of first finger for pan direction
+                    const touch = e.touches[0];
+                    const x = (touch.clientX / window.innerWidth) * 2 - 1;
+                    const y = -(touch.clientY / window.innerHeight) * 2 + 1;
+
+                    if (this.touchMode === 'twoFinger') {
+                        this.velocity.x = (x - (this.prevMouse.x || x)) * window.innerWidth / 2;
+                        this.velocity.y = (y - (this.prevMouse.y || y)) * window.innerHeight / 2;
+                    }
+
+                    this.prevMouse.x = x;
+                    this.prevMouse.y = y;
+                }
+            } else if (e.touches.length === 1 && this.navigationMode === 'orbit') {
+                // Single finger - orbit camera
                 const touch = e.touches[0];
-                const x = (touch.clientX / window.innerWidth) * 2 - 1;
-                const y = -(touch.clientY / window.innerHeight) * 2 + 1;
+                const clientX = touch.clientX;
+                const clientY = touch.clientY;
 
-                this.mouse.x = x;
-                this.mouse.y = y;
+                // Use pixel movement for velocity (orbit uses velocity)
+                this.velocity.x = touch.clientX - (this.lastTouchX || touch.clientX);
+                this.velocity.y = touch.clientY - (this.lastTouchY || touch.clientY);
 
-                this.delta.x = x - this.prevMouse.x;
-                this.delta.y = y - this.prevMouse.y;
-                this.prevMouse.x = x;
-                this.prevMouse.y = y;
+                this.lastTouchX = touch.clientX;
+                this.lastTouchY = touch.clientY;
             }
-        }, { passive: false }); // Allow preventDefault
+        }, { passive: false });
 
         // Gyroscope support (device orientation)
         window.addEventListener('deviceorientation', (e) => {

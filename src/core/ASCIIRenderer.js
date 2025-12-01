@@ -19,6 +19,9 @@ export class ASCIIRenderer {
         this.baseDensity = 0.15; // Original density (saved for recovery)
         this.minDensity = 0.05; // Minimum quality fallback
 
+        // Wireframe mode
+        this.showWireframe = false;
+
         // Container for all layers
         this.container = document.createElement('div');
         this.container.style.position = 'absolute';
@@ -218,6 +221,16 @@ export class ASCIIRenderer {
                 console.log(`[Adaptive] Increased density to ${this.density.toFixed(3)} (FPS: ${currentFPS.toFixed(1)})`);
             }
         }
+    }
+
+    toggleWireframe() {
+        this.showWireframe = !this.showWireframe;
+
+        // Toggle ASCII container visibility
+        this.container.style.display = this.showWireframe ? 'none' : 'block';
+
+        console.log(`[ASCII] ${this.showWireframe ? 'Hidden (Wireframe)' : 'Visible'}`);
+        return this.showWireframe;
     }
 
     async exportToPNG() {
